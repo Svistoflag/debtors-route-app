@@ -31,8 +31,11 @@ if uploaded_file:
 
     # Отображение карты
     st.subheader("🗺️ Карта клиентов")
-    m = folium.Map(location=[df["lat"].mean(), df["lon"].mean()], zoom_start=12)
-    for _, row in df.iterrows():
+   valid_coords = df.dropna(subset=["lat", "lon"])
+m = folium.Map(location=[valid_coords["lat"].mean(), valid_coords["lon"].mean()], zoom_start=12)
+
+    for _, row in valid_coords.iterrows():
+
         if pd.notna(row["lat"]) and pd.notna(row["lon"]):
             folium.Marker(
                 location=[row["lat"], row["lon"]],
