@@ -2,12 +2,13 @@
 import streamlit as st
 import pandas as pd
 import re
+import folium
+from streamlit_folium import st_folium
 from modules.geocode import geocode_address
 
 st.set_page_config(layout="wide")
 st.title("Контроль и валидация адресов | МОСЭНЕРГОСБЫТ")
 
-# Функция для определения, является ли строка адресом
 def is_probable_address(value):
     if not isinstance(value, str):
         return False
@@ -15,9 +16,8 @@ def is_probable_address(value):
         return True
     return False
 
-# Функция для определения кадастрового номера
 def is_kad_number(value):
-    return isinstance(value, str) and bool(re.match(r"^\d{2}:\d{2}:\d{6,7}:\d+$", value))
+    return isinstance(value, str) and bool(re.match(r"^\\d{2}:\\d{2}:\\d{6,7}:\\d+$", value))
 
 uploaded_file = st.file_uploader("📁 Загрузите Excel-файл с данными", type=["xlsx"])
 if uploaded_file:
@@ -44,20 +44,42 @@ if uploaded_file:
             "адрес" if row["is_address"] else "некорректный"), axis=1)
 
         st.subheader("🟢 Валидные адреса")
-        st.dataframe(df[df["status"] == "адрес"])
+        valid_df = df[df["status"] == "адрес"]
+        st.dataframe(valid_df)
 
-        st.subheader("🟡 Кадастровые номера")
-        st.dataframe(df[df["status"] == "кадастр"])
-
-        st.subheader("🔴 Некорректные строки")
-        st.dataframe(df[df["status"] == "некорректный"])
-
-        # Кнопки для действий
         st.subheader("⚙️ Действия")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.button("📍 Геокодировать валидные адреса (основной)")
-        with col2:
-            st.button("🧠 Автоисправление некорректных строк")
-        with col3:
-            st.button("📬 Конвертировать кадастровые номера в адреса (Росреестр)")
+        if st.button("📍 Геокодировать и отобразить адреса по убыванию долга"):
+            st.info("⏳ Геокодирование...")
+            coords = []
+            for _, row in valid_df.iterrows():
+                addr = row[address_column]
+                lat, lon = geocode_address(addr)
+                coords.append((lat, lon))
+            valid_df["lat"] = [c[0] for c in coords]
+            valid_df["lon"] = [c[1] for c in coords]
+
+            valid_coords = valid_df.dropna(subset=["lat", "lon"])
+
+            # Сортировка по задолженности
+            if "Задолженность" in valid_coords.columns:
+                valid_coords = valid_coords.sort_values(by="Задолженность", ascending=False)
+
+            # Карта с точками
+            st.subheader("🗺️ Карта адресов по убыванию долга")
+            if not valid_coords.empty:
+                m = folium.Map(location=[valid_coords["lat"].mean(), valid_coords["lon"].mean()], zoom_start=11)
+                for _, row in valid_coords.iterrows():
+                    popup_text = f"{row[address_column]}\\nЗадолженность: {row['Задолженность']} ₽"
+                    folium.Marker(
+                        location=[row["lat"], row["lon"]],
+                        popup=popup_text,
+                        icon=folium.Icon(color="red")
+                    ).add_to(m)
+                st_folium(m, width=900, height=600)
+
+                # Список адресов
+                st.subheader("📄 Список адресов по убыванию долга:")
+                for _, row in valid_coords.iterrows():
+                    st.markdown(f"- **{row[address_column]}** — {row['Задолженность']} ₽")
+            else:
+                st.warning("Не удалось получить координаты ни для одного адреса.")
