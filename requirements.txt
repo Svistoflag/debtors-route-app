@@ -1,6 +1,7 @@
 streamlit
 pandas
 folium
+st_folium
 geopy
 requests
 osmnx
