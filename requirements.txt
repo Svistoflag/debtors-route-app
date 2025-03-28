@@ -1,0 +1,8 @@
+streamlit
+pandas
+folium
+geopy
+requests
+osmnx
+openpyxl
+reportlab
